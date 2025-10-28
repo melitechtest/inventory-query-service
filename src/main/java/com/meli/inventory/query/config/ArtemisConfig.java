@@ -25,33 +25,22 @@ public class ArtemisConfig {
 
     @Bean
     public JmsListenerContainerFactory<?> jmsListenerContainerFactory(ConnectionFactory connectionFactory, DefaultJmsListenerContainerFactoryConfigurer configurer, MessageConverter messageConverter) {
-
         DefaultJmsListenerContainerFactory factory = new DefaultJmsListenerContainerFactory();
         configurer.configure(factory, connectionFactory);
-
         factory.setPubSubDomain(true);
         factory.setConcurrency("3-10");
         factory.setMessageConverter(messageConverter);
-
-        factory.setErrorHandler(t -> LoggerFactory.getLogger(ArtemisConfig.class).error("JMS listener error", t));
-
         return factory;
     }
 
     @Bean
     public MessageConverter jacksonJmsMessageConverter() {
-        ObjectMapper mapper = new ObjectMapper();
-
-        mapper.activateDefaultTyping(BasicPolymorphicTypeValidator.builder().allowIfBaseType("com.meli.inventory.query.dto").allowIfBaseType("com.meli.inventory.command.dto").allowIfBaseType("java.lang").allowIfBaseType("java.util").build(), ObjectMapper.DefaultTyping.NON_FINAL);
-
         MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter();
         converter.setTargetType(MessageType.TEXT);
         converter.setTypeIdPropertyName("__TypeId__");
-        converter.setObjectMapper(mapper);
 
         Map<String, Class<?>> typeIdMappings = new HashMap<>();
         typeIdMappings.put("com.meli.inventory.command.dto.StockUpdateEvent", com.meli.inventory.query.dto.StockUpdateEvent.class);
-        typeIdMappings.put("StockUpdateEvent", com.meli.inventory.query.dto.StockUpdateEvent.class);
         converter.setTypeIdMappings(typeIdMappings);
 
         return converter;
