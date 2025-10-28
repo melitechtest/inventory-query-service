@@ -7,8 +7,8 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 
 /**
- * Data Transfer Object for stock updates received from RabbitMQ.
- * Must match the package structure and fields of the command service's DTO.
+ * Data Transfer Object for stock updates received via JMS.
+ * Fields must match the producer's event structure.
  */
 @Data
 @NoArgsConstructor
