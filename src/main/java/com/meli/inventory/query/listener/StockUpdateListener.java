@@ -24,14 +24,10 @@ public class StockUpdateListener {
      *
      * @param event The received StockUpdateEvent object.
      */
-    @RabbitListener(queues = QUEUE_NAME)
     public void handleStockUpdate(StockUpdateEvent event) {
         log.info("Event received: {} -> {} units", event.getProductId(), event.getNewQuantity());
-
         String key = REDIS_KEY_PREFIX + event.getProductId();
         String value = String.valueOf(event.getNewQuantity());
-
-        // Write the latest stock quantity to Redis
         redisTemplate.opsForValue().set(key, value);
     }
 }
