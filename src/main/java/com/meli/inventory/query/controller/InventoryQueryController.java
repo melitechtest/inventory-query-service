@@ -2,18 +2,18 @@ package com.meli.inventory.query.controller;
 
 import com.meli.inventory.query.listener.StockUpdateListener;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+import java.time.Duration;
 import java.util.Map;
 
-/**
- * REST controller for handling read queries from the Redis cache.
- */
+@Slf4j
 @RestController
 @RequestMapping("/api/queries")
 @RequiredArgsConstructor
@@ -23,13 +23,40 @@ public class InventoryQueryController {
 
     @GetMapping("/stock/{productId}")
     public ResponseEntity<?> getStock(@PathVariable String productId) {
-        String key = StockUpdateListener.REDIS_KEY_PREFIX + productId;
-        String stockValue = redisTemplate.opsForValue().get(key);
+        final String key = StockUpdateListener.REDIS_KEY_PREFIX + productId;
 
-        if (stockValue == null) {
-            return ResponseEntity.ok(Map.of("productId", productId, "stock", 0, "status", "Not yet processed or zero stock"));
+        try {
+            String stockValue = redisTemplate.opsForValue().get(key);
+
+            if (stockValue == null) {
+                return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(5))).body(Map.of("productId", productId, "stock", 0, "status", "Not yet processed or zero stock"));
+            }
+
+            Integer stock = safeParseInt(stockValue);
+            if (stock == null) {
+                log.warn("Non-numeric stock value in cache for key {}: '{}'", key, stockValue);
+                return ResponseEntity.ok().cacheControl(CacheControl.noCache()).body(Map.of("productId", productId, "stock", 0, "status", "Invalid cached value; defaulted to 0"));
+            }
+
+            return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(5))).body(Map.of("productId", productId, "stock", stock));
+
+        } catch (RedisConnectionFailureException e) {
+            log.error("Redis connection failure while reading {}", key, e);
+            return ResponseEntity.status(503).cacheControl(CacheControl.noCache()).body(Map.of("error", "Cache temporarily unavailable", "productId", productId));
+        } catch (DataAccessException e) {
+            log.error("DataAccessException while reading {}", key, e);
+            return ResponseEntity.status(502).cacheControl(CacheControl.noCache()).body(Map.of("error", "Cache access error", "productId", productId));
+        } catch (Exception e) {
+            log.error("Unexpected error in getStock for {}", productId, e);
+            return ResponseEntity.internalServerError().cacheControl(CacheControl.noCache()).body(Map.of("error", "Unexpected error", "productId", productId));
         }
+    }
 
-        return ResponseEntity.ok(Map.of("productId", productId, "stock", Integer.parseInt(stockValue)));
+    private Integer safeParseInt(String value) {
+        try {
+            return Integer.valueOf(value.trim());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }
